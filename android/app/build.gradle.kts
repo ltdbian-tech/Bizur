@@ -35,8 +35,8 @@ android {
         applicationId = "com.bizur.android"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 3
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -70,8 +70,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Disable minify/shrink for this build to avoid long R8 runs; re-enable before store upload.
+            isMinifyEnabled = false
+            isShrinkResources = false
             isDebuggable = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -21,6 +21,38 @@
 				"assembleDebug"
 			],
 			"group": "build"
+		},
+		{
+			"label": "gradle assembleRelease",
+			"type": "shell",
+			"command": ".\\android\\gradlew.bat",
+			"args": [
+				"-p",
+				"android",
+				"--no-daemon",
+				"assembleRelease",
+				"-x",
+				"lintVitalRelease",
+				"-PAUTH_TOKEN=e6ee12258e94707e867852f91ceb1b64",
+				"-PAPI_KEY=5314efa6f71a49e411ce04355e244761b8fc48b3a29f081b"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "gradle bundleRelease",
+			"type": "shell",
+			"command": ".\\android\\gradlew.bat",
+			"args": [
+				"-p",
+				"android",
+				"--no-daemon",
+				"bundleRelease",
+				"-x",
+				"lintVitalRelease",
+				"-PAUTH_TOKEN=e6ee12258e94707e867852f91ceb1b64",
+				"-PAPI_KEY=5314efa6f71a49e411ce04355e244761b8fc48b3a29f081b"
+			],
+			"problemMatcher": []
 		}
 	]
 }

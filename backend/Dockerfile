@@ -17,5 +17,5 @@ RUN npm run build && npm prune --omit=dev
 RUN mkdir -p /data
 ENV DATABASE_PATH=/data/bizur.db
 
-EXPOSE 8787
+EXPOSE 10000
 CMD ["node", "dist/index.js"]
