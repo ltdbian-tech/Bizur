@@ -1,0 +1,23 @@
+{
+  "name": "bizur-signaling-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-esm src/index.ts"
+  },
+  "dependencies": {
+    "express": "4.19.2",
+    "ws": "8.18.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.21",
+    "@types/node": "20.11.30",
+    "@types/ws": "8.5.12",
+    "ts-node": "10.9.2",
+    "typescript": "5.4.5"
+  }
+}

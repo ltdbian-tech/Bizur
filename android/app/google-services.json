@@ -1,0 +1,23 @@
+{
+  "project_info": {
+    "project_number": "1234567890",
+    "project_id": "bizur-placeholder",
+    "storage_bucket": "bizur-placeholder.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1234567890:android:placeholder",
+        "android_client_info": {
+          "package_name": "com.bizur.android"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "FAKE_FIREBASE_KEY"
+        }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}

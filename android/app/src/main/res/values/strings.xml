@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Bizur</string>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_desc">Alerts when new secure messages arrive</string>
+    <string name="notification_channel_calls">Calls</string>
+    <string name="notification_channel_calls_desc">Keeps Bizur calls active while you stay in the conversation.</string>
+    <string name="notification_call_outgoing">Calling %1$s</string>
+    <string name="notification_call_incoming">%1$s is calling</string>
+    <string name="notification_call_connected">Connected with %1$s</string>
+    <string name="notification_action_hang_up">Hang Up</string>
+    <string name="notification_action_answer">Answer</string>
+    <string name="notification_action_decline">Decline</string>
+</resources>
