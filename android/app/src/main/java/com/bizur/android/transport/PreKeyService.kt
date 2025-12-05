@@ -7,6 +7,8 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.client.request.get
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.header
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
@@ -16,7 +18,8 @@ import io.ktor.client.plugins.HttpTimeout
 
 class PreKeyService(
     baseUrl: String,
-    json: Json
+    json: Json,
+    authToken: String
 ) {
     private val root = baseUrl.trimEnd('/')
     private val client = HttpClient(OkHttp) {
@@ -25,6 +28,11 @@ class PreKeyService(
             requestTimeoutMillis = 15_000
             connectTimeoutMillis = 10_000
             socketTimeoutMillis = 15_000
+        }
+        if (authToken.isNotBlank()) {
+            defaultRequest {
+                header("x-api-key", authToken)
+            }
         }
     }
 

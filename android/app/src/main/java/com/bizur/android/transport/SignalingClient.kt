@@ -15,6 +15,9 @@ import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -97,7 +100,8 @@ class SignalingClient(
         while (running.get() && scope.isActive) {
             var delayAfter = nextDelay
             try {
-                httpClient.ws(urlString = url) {
+                val fullUrl = buildUrl()
+                httpClient.ws(urlString = fullUrl) {
                     sessionMutex.withLock { session = this }
                     _events.emit(SignalingEvent.Connected)
                     register()
@@ -190,6 +194,9 @@ class SignalingClient(
             put("from", JsonPrimitive(identity))
             put("to", JsonPrimitive(to))
             put("payload", payload)
+            if (type == "ciphertext") {
+                put("msgId", JsonPrimitive(UUID.randomUUID().toString()))
+            }
         }
         sendRaw(envelope)
     }
@@ -208,6 +215,31 @@ class SignalingClient(
             active.send(Frame.Text(obj.toString()))
         }
     }
+
+    private fun buildUrl(): String {
+        val base = config.signalingUrl.trimEnd('/')
+        val ts = System.currentTimeMillis()
+        val nonce = UUID.randomUUID().toString()
+        val apiKey = config.apiKey
+
+        val query = if (apiKey.isNotBlank()) {
+            val sig = hmacSha256(apiKey, "$identity:$ts:$nonce")
+            "identity=${encode(identity)}&apiKey=${encode(apiKey)}&ts=$ts&nonce=${encode(nonce)}&sig=$sig"
+        } else {
+            // legacy fallback using shared AUTH_TOKEN
+            "identity=${encode(identity)}&token=${encode(config.authToken)}"
+        }
+
+        return if (base.contains("?")) "$base&$query" else "$base/?$query"
+    }
+
+    private fun hmacSha256(key: String, data: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(key.toByteArray(), "HmacSHA256"))
+        return mac.doFinal(data.toByteArray()).joinToString("") { b -> "%02x".format(b) }
+    }
+
+    private fun encode(value: String): String = java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
 }
 
 sealed interface SignalingEvent {

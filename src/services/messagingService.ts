@@ -1,6 +1,7 @@
 import type { Identity, Message } from '@/types/messaging';
 
 const BACKEND_WS_URL = 'wss://bizur-backend.onrender.com/';
+const AUTH_TOKEN = process.env.EXPO_PUBLIC_AUTH_TOKEN || '';
 
 interface MessagingOptions {
   identity: Identity;
@@ -38,12 +39,16 @@ export const createMessagingClient = ({
 
   const connect = () => {
     if (connected || socket?.readyState === WebSocket.OPEN) return;
+    if (!AUTH_TOKEN) {
+      console.error('AUTH_TOKEN is missing; set EXPO_PUBLIC_AUTH_TOKEN');
+      return;
+    }
     try {
-      socket = new WebSocket(BACKEND_WS_URL);
+      const url = `${BACKEND_WS_URL}?token=${AUTH_TOKEN}&identity=${encodeURIComponent(identity.id)}`;
+      socket = new WebSocket(url);
 
       socket.onopen = () => {
         connected = true;
-        socket?.send(JSON.stringify({ type: 'register', from: identity.id, deviceId: 0 }));
         socket?.send(JSON.stringify({ type: 'pullQueue' }));
         while (outbox.length) {
           const pending = outbox.shift();
@@ -130,6 +135,7 @@ export const createMessagingClient = ({
           type: 'ciphertext',
           to: conversationId,
           from: identity.id,
+          msgId: payload.id,
           payload,
         })
       );

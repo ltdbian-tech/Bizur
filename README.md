@@ -7,6 +7,13 @@ Bizur now ships with two code paths:
 
 The Expo app remains intact for potential future cross-platform work, while the Android module is the current focus.
 
+## Quick start (no coding)
+
+- Open PowerShell, go to the repo: `cd "c:\Users\adith\OneDrive\Documents\app idea\Bizur"`.
+- Run the helper: `powershell -ExecutionPolicy Bypass -File .\signaling-setup.ps1 -BackendUrl "https://your-backend" -Identity "your-name" -AuthToken "<AUTH_TOKEN>" -Install`
+- It will: (1) call `/auth/register` to get your `apiKey`, (2) build the Android APK, and (3) install it if an emulator/device is connected.
+- After install, open the app and use the same identity you registered.
+
 ## Android (Jetpack Compose) Highlights
 
 - 📱 Kotlin + Jetpack Compose UI with Material 3 styling and a bottom navigation shell.
@@ -32,6 +39,8 @@ The Expo app remains intact for potential future cross-platform work, while the 
 - A background WorkManager task (`QueueDrainWorker`) periodically wakes the relay even if WebRTC data channels are down, drains queued ciphertext packets, and surfaces system notifications so contacts still receive store-and-forward deliveries.
 - Audio calling now reuses the same PeerConnection: tapping a call button negotiates an audio track, enforces the `RECORD_AUDIO` permission, and shows a system-wide call banner so you can hang up from any tab.
 - `CallForegroundService` pins a lightweight notification with channel `Calls`, satisfying Android 14's background limits so ringing/connected calls continue streaming microphone audio even if the UI is backgrounded.
+- Production relay (Render) now enforces an `AUTH_TOKEN` shared secret. Connect via `wss://<host>/?token=AUTH_TOKEN&identity=<peerCode>`; the server ignores any client-supplied `from` and binds the session to `identity`. REST calls must send `x-api-key: AUTH_TOKEN`.
+- Health endpoints: `GET /health` returns status + uptime, and `GET /version` returns the deployed version/commit.
 
 ### Pairing codes (contact linking)
 

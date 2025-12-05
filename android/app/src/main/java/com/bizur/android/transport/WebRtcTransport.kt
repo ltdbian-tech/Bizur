@@ -65,7 +65,7 @@ class WebRtcTransport(
 	private val profile = identityManager.getOrCreateProfile()
 	private val selfId = buildSelfId(profile.registrationId, profile.deviceId)
 	private val localPreKeyBundle: PreKeyBundlePayload by lazy { signalStore.exportPreKeyBundle() }
-	private val preKeyService = PreKeyService(config.preKeyServiceUrl, json)
+	private val preKeyService = PreKeyService(config.preKeyServiceUrl, json, config.authToken)
 	private val signalCipher = SignalCipher(signalStore, preKeyService)
 
 	private val signalingClient = SignalingClient(

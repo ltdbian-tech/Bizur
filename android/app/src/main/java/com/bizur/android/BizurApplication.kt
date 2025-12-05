@@ -58,7 +58,7 @@ class BizurContainer(
         config = transportConfig,
         json = json
     )
-    private val pushClient = PushRegistrationClient(transportConfig.pushServiceUrl, json)
+    private val pushClient = PushRegistrationClient(transportConfig.pushServiceUrl, json, transportConfig.authToken)
     val pushRegistrar = PushRegistrar(
         context = context,
         identityStore = identityStore,

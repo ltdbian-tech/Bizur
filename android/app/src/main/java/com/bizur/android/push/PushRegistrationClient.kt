@@ -4,6 +4,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -14,7 +16,8 @@ import kotlinx.serialization.json.Json
 
 class PushRegistrationClient(
     baseUrl: String,
-    json: Json
+    json: Json,
+    authToken: String
 ) {
     private val root = baseUrl.trimEnd('/')
     private val client = HttpClient(OkHttp) {
@@ -23,6 +26,11 @@ class PushRegistrationClient(
             requestTimeoutMillis = 10_000
             connectTimeoutMillis = 10_000
             socketTimeoutMillis = 10_000
+        }
+        if (authToken.isNotBlank()) {
+            defaultRequest {
+                header("x-api-key", authToken)
+            }
         }
     }
 

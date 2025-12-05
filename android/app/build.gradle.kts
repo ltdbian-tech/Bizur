@@ -22,6 +22,10 @@ val defaultPreKeyUrl =
     (project.findProperty("PREKEY_URL") as? String)?.ifBlank { null } ?: "http://10.0.2.2:8787"
 val defaultPushUrl =
     (project.findProperty("PUSH_URL") as? String)?.ifBlank { null } ?: "http://10.0.2.2:8787"
+val defaultApiKey =
+    (project.findProperty("API_KEY") as? String)?.ifBlank { null } ?: ""
+val defaultAuthToken =
+    (project.findProperty("AUTH_TOKEN") as? String)?.ifBlank { null } ?: ""
 
 android {
     namespace = "com.bizur.android"
@@ -42,6 +46,8 @@ android {
         buildConfigField("String", "SIGNALING_URL", "\"$defaultSignalingUrl\"")
         buildConfigField("String", "PREKEY_SERVICE_URL", "\"$defaultPreKeyUrl\"")
         buildConfigField("String", "PUSH_SERVICE_URL", "\"$defaultPushUrl\"")
+        buildConfigField("String", "API_KEY", "\"$defaultApiKey\"")
+        buildConfigField("String", "AUTH_TOKEN", "\"$defaultAuthToken\"")
     }
 
     signingConfigs {
