@@ -6,11 +6,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+# Install all deps (including dev) so TypeScript is available for build
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
+RUN npm run build && npm prune --omit=dev
 
 # Create data directory for SQLite
 RUN mkdir -p /data
