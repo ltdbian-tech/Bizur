@@ -10,6 +10,7 @@ import com.bizur.android.data.local.toEntity
 import com.bizur.android.media.AttachmentStore
 import com.bizur.android.model.Contact
 import com.bizur.android.model.PresenceStatus
+import com.bizur.android.transport.ContactEvent
 import com.bizur.android.transport.IncomingMessage
 import com.bizur.android.transport.MediaChunkEnvelope
 import com.bizur.android.transport.MediaEnvelope
@@ -208,15 +209,23 @@ class MediaTransportInstrumentationTest {
     private class TestMessageTransport : MessageTransport {
         private val _status = MutableStateFlow(TransportStatus.Connected)
         private val _incoming = MutableSharedFlow<IncomingMessage>()
+        private val _contactEvents = MutableSharedFlow<ContactEvent>()
 
         override val status: StateFlow<TransportStatus> = _status
         override val incomingMessages: Flow<IncomingMessage> = _incoming
+        override val contactEvents: Flow<ContactEvent> = _contactEvents
 
         override suspend fun start() = Unit
 
         override suspend fun sendMessage(peerId: String, payload: TransportPayload) = Unit
 
         override suspend fun requestQueueSync() = Unit
+
+        override suspend fun sendContactRequest(peerId: String, displayName: String) = Unit
+
+        override suspend fun sendContactResponse(peerId: String, accepted: Boolean, displayName: String) = Unit
+
+        override suspend fun lookupPeer(peerCode: String) = Unit
 
         override fun close() {
             _status.value = TransportStatus.Disconnected

@@ -5,9 +5,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,10 +40,15 @@ fun CallStatusBanner(
     onEndCall: () -> Unit,
     onAcceptCall: (() -> Unit)? = null,
     onDeclineCall: (() -> Unit)? = null,
+    onToggleMute: ((Boolean) -> Unit)? = null,
+    onToggleSpeaker: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (callState.status == CallStatus.Idle) return
     var elapsed by remember { mutableStateOf(0L) }
+    var isMuted by remember { mutableStateOf(false) }
+    var isSpeakerOn by remember { mutableStateOf(false) }
+    
     LaunchedEffect(callState.startedAtMillis, callState.status) {
         if (callState.status == CallStatus.Connected && callState.startedAtMillis != null) {
             while (callState.status == CallStatus.Connected) {
@@ -54,7 +67,7 @@ fun CallStatusBanner(
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = when (callState.status) {
@@ -71,6 +84,40 @@ fun CallStatusBanner(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            
+            // Call controls when connected
+            if (callState.status == CallStatus.Connected) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    FilledTonalIconButton(
+                        onClick = {
+                            isMuted = !isMuted
+                            onToggleMute?.invoke(isMuted)
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
+                            contentDescription = if (isMuted) "Unmute" else "Mute"
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = {
+                            isSpeakerOn = !isSpeakerOn
+                            onToggleSpeaker?.invoke(isSpeakerOn)
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSpeakerOn) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                            contentDescription = if (isSpeakerOn) "Speaker on" else "Speaker off"
+                        )
+                    }
+                }
+            }
+            
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 modifier = Modifier.fillMaxWidth()

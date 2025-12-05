@@ -10,11 +10,21 @@ import kotlinx.serialization.Serializable
 interface MessageTransport {
     val status: StateFlow<TransportStatus>
     val incomingMessages: Flow<IncomingMessage>
+    val contactEvents: Flow<ContactEvent>
 
     suspend fun start()
     suspend fun sendMessage(peerId: String, payload: TransportPayload)
     suspend fun requestQueueSync()
+    suspend fun sendContactRequest(peerId: String, displayName: String)
+    suspend fun sendContactResponse(peerId: String, accepted: Boolean, displayName: String)
+    suspend fun lookupPeer(peerCode: String)
     fun close()
+
+    /**
+     * Returns true if the peer has an open P2P data channel for direct messaging.
+     * Useful for checking if large payloads (attachments) can be sent without queuing.
+     */
+    fun isPeerDirectlyReachable(peerId: String): Boolean = false
 }
 
 data class IncomingMessage(
@@ -22,6 +32,12 @@ data class IncomingMessage(
     val payload: TransportPayload,
     val via: TransportChannel
 )
+
+sealed interface ContactEvent {
+    data class RequestReceived(val from: String, val displayName: String, val timestamp: Long) : ContactEvent
+    data class ResponseReceived(val from: String, val accepted: Boolean, val displayName: String) : ContactEvent
+    data class LookupResult(val peerCode: String, val found: Boolean) : ContactEvent
+}
 
 enum class TransportChannel { DataChannel, SignalingQueue }
 

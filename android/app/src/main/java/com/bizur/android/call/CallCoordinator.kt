@@ -29,7 +29,10 @@ class CallCoordinator(
     val state: StateFlow<CallSessionState> = _state.asStateFlow()
 
     suspend fun startCall(peerId: String, displayName: String) {
-        ensureMicPermission()
+        if (!hasMicPermission()) {
+            android.util.Log.w("CallCoordinator", "Cannot start call - microphone permission not granted")
+            return
+        }
         val callId = UUID.randomUUID().toString()
         updateState(
             CallSessionState(
@@ -70,7 +73,10 @@ class CallCoordinator(
         if (ringingState.status != CallStatus.Ringing) return
         val peerId = ringingState.peerId ?: return
         val callId = ringingState.callId ?: return
-        ensureMicPermission()
+        if (!hasMicPermission()) {
+            android.util.Log.w("CallCoordinator", "Cannot accept call - microphone permission not granted")
+            return
+        }
         transport.enableAudio(peerId)
         sendSignal(peerId, CallSignal(CallSignalType.ACCEPT, callId, ringingState.displayName))
         updateState(
@@ -135,10 +141,8 @@ class CallCoordinator(
         messaging.sendMessage(peerId, payload)
     }
 
-    private fun ensureMicPermission() {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        check(granted) { "Microphone permission not granted" }
-    }
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private fun updateState(newState: CallSessionState) {
         _state.value = newState

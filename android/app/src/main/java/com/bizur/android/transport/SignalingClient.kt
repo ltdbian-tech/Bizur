@@ -62,6 +62,7 @@ class SignalingClient(
 
     suspend fun start() {
         if (!running.compareAndSet(false, true)) return
+        Log.i(SIGNALING_TAG, "SignalingClient starting, identity=$identity")
         scope.launch { runLoop() }
     }
 
@@ -76,6 +77,24 @@ class SignalingClient(
 
     suspend fun sendCiphertext(to: String, payload: CiphertextPayload) =
         sendRouted("ciphertext", to, json.encodeToJsonElement(CiphertextPayload.serializer(), payload))
+
+    suspend fun sendContactRequest(to: String, payload: ContactRequestPayload) =
+        sendRouted("contact_request", to, json.encodeToJsonElement(ContactRequestPayload.serializer(), payload))
+
+    suspend fun sendContactResponse(to: String, payload: ContactResponsePayload) =
+        sendRouted("contact_response", to, json.encodeToJsonElement(ContactResponsePayload.serializer(), payload))
+
+    suspend fun lookupPeer(peerCode: String): Boolean {
+        // Send lookup request and await response via events
+        val envelope = buildJsonObject {
+            put("type", JsonPrimitive("lookup"))
+            put("from", JsonPrimitive(identity))
+            put("target", JsonPrimitive(peerCode))
+        }
+        sendRaw(envelope)
+        // The server will respond with a "lookup_result" event
+        return true // Caller should listen for LookupResult event
+    }
 
     suspend fun requestQueueDrain() = sendRaw(
         buildJsonObject {
@@ -96,12 +115,15 @@ class SignalingClient(
     }
 
     private suspend fun runLoop() {
+        Log.i(SIGNALING_TAG, "runLoop started")
         var nextDelay = config.reconnectDelayMillis
         while (running.get() && scope.isActive) {
             var delayAfter = nextDelay
             try {
                 val fullUrl = buildUrl()
+                Log.i(SIGNALING_TAG, "Connecting to: $fullUrl")
                 httpClient.ws(urlString = fullUrl) {
+                    Log.i(SIGNALING_TAG, "WebSocket connected")
                     sessionMutex.withLock { session = this }
                     _events.emit(SignalingEvent.Connected)
                     register()
@@ -166,8 +188,13 @@ class SignalingClient(
         val type = obj["type"]?.jsonPrimitive?.content ?: return
         when (type) {
             "registered" -> _events.emit(SignalingEvent.Registered)
-            "offer", "answer", "ice", "ciphertext" -> emitRouted(obj)
+            "offer", "answer", "ice", "ciphertext", "contact_request", "contact_response" -> emitRouted(obj)
             "queued" -> obj["payload"]?.let { dispatchElement(it) }
+            "lookup_result" -> {
+                val target = obj["target"]?.jsonPrimitive?.content ?: return
+                val found = obj["found"]?.jsonPrimitive?.content?.toBoolean() ?: false
+                _events.emit(SignalingEvent.LookupResult(target, found))
+            }
             "error" -> _events.emit(
                 SignalingEvent.Error(obj["message"]?.jsonPrimitive?.content ?: "unknown error")
             )
@@ -185,6 +212,8 @@ class SignalingClient(
             "answer" -> _events.emit(SignalingEvent.Answer(from, json.decodeFromJsonElement(SdpPayload.serializer(), payload)))
             "ice" -> _events.emit(SignalingEvent.Ice(from, json.decodeFromJsonElement(IceCandidatePayload.serializer(), payload)))
             "ciphertext" -> _events.emit(SignalingEvent.Ciphertext(from, json.decodeFromJsonElement(CiphertextPayload.serializer(), payload)))
+            "contact_request" -> _events.emit(SignalingEvent.ContactRequest(from, json.decodeFromJsonElement(ContactRequestPayload.serializer(), payload)))
+            "contact_response" -> _events.emit(SignalingEvent.ContactResponse(from, json.decodeFromJsonElement(ContactResponsePayload.serializer(), payload)))
         }
     }
 
@@ -250,6 +279,9 @@ sealed interface SignalingEvent {
     data class Answer(val from: String, val payload: SdpPayload) : SignalingEvent
     data class Ice(val from: String, val payload: IceCandidatePayload) : SignalingEvent
     data class Ciphertext(val from: String, val payload: CiphertextPayload) : SignalingEvent
+    data class ContactRequest(val from: String, val payload: ContactRequestPayload) : SignalingEvent
+    data class ContactResponse(val from: String, val payload: ContactResponsePayload) : SignalingEvent
+    data class LookupResult(val target: String, val found: Boolean) : SignalingEvent
     data class Error(val message: String) : SignalingEvent
 }
 
@@ -280,4 +312,17 @@ data class RelayAuthPayload(
     val timestamp: Long,
     val identityKey: String,
     val signature: String
+)
+
+@Serializable
+data class ContactRequestPayload(
+    val displayName: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+@Serializable
+data class ContactResponsePayload(
+    val accepted: Boolean,
+    val displayName: String = "",
+    val timestamp: Long = System.currentTimeMillis()
 )

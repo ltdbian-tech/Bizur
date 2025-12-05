@@ -78,8 +78,33 @@ class BizurViewModel(private val repository: BizurRepository) : ViewModel() {
         viewModelScope.launch { repository.pingContact(contactId) }
     }
 
+    /**
+     * Returns true if the peer has an open P2P data channel.
+     * Used to conditionally enable attachment sending.
+     */
+    fun isPeerDirectlyReachable(peerId: String): Boolean =
+        repository.isPeerDirectlyReachable(peerId)
+
+    val lookupResult = repository.lookupResult
+
+    fun validatePeerCode(peerCode: String) {
+        viewModelScope.launch { repository.validatePeerCode(peerCode) }
+    }
+
+    fun clearLookupResult() {
+        repository.clearLookupResult()
+    }
+
     fun createContact(name: String, peerCode: String) {
         viewModelScope.launch { repository.createContact(name, peerCode) }
+    }
+
+    fun acceptContactRequest(contactId: String) {
+        viewModelScope.launch { repository.acceptContactRequest(contactId) }
+    }
+
+    fun rejectContactRequest(contactId: String) {
+        viewModelScope.launch { repository.rejectContactRequest(contactId) }
     }
 
     fun placeCall(contactId: String) {

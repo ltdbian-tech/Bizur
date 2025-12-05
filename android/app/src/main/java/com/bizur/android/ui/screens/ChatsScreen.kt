@@ -30,19 +30,28 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Attachment
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.SignalWifiConnectedNoInternet4
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -125,6 +134,7 @@ fun ChatListScreen(
 ) {
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     val pullRefreshState = rememberPullRefreshState(
         refreshing = refreshing,
         onRefresh = {
@@ -136,6 +146,14 @@ fun ChatListScreen(
             }
         }
     )
+
+    val filteredConversations = remember(conversations, searchQuery) {
+        if (searchQuery.isBlank()) {
+            conversations
+        } else {
+            conversations.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -149,8 +167,33 @@ fun ChatListScreen(
             OfflineBanner()
         }
 
-        if (conversations.isEmpty()) {
-            EmptyConversationPlaceholder()
+        TextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            placeholder = { Text("Search contacts") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent
+            )
+        )
+
+        if (filteredConversations.isEmpty()) {
+            if (searchQuery.isNotBlank()) {
+                Text(
+                    text = "No contacts matching \"$searchQuery\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                EmptyConversationPlaceholder()
+            }
         } else {
             Box(
                 modifier = Modifier
@@ -162,7 +205,7 @@ fun ChatListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(
-                        items = conversations,
+                        items = filteredConversations,
                         key = { it.id },
                         contentType = { "conversation" }
                     ) { conversation ->
@@ -187,6 +230,9 @@ fun ChatDetailScreen(
     mediaSendProgress: MediaSendProgress?,
     selfId: String,
     isOnline: Boolean,
+    isPeerDirectlyReachable: Boolean,
+    isContactBlocked: Boolean,
+    isContactMuted: Boolean,
     typingConversations: Set<String>,
     draft: String,
     onDraftChanged: (String) -> Unit,
@@ -200,11 +246,16 @@ fun ChatDetailScreen(
     onSetReaction: (Message, String?) -> Unit,
     onMarkRead: (String, String) -> Unit,
     onTyping: (String, String) -> Unit,
+    onCall: (String) -> Unit,
+    onSetBlocked: (String, Boolean) -> Unit,
+    onSetMuted: (String, Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var showSearchBar by rememberSaveable { mutableStateOf(false) }
     var debouncedSearch by remember { mutableStateOf("") }
     var replyingTo by remember { mutableStateOf<Message?>(null) }
+    var showMenu by remember { mutableStateOf(false) }
 
     val currentConversation = conversation
 
@@ -227,7 +278,7 @@ fun ChatDetailScreen(
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IconButton(onClick = onBack) {
                 Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
             }
@@ -237,24 +288,88 @@ fun ChatDetailScreen(
                     Text("Offline", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            IconButton(onClick = { showSearchBar = !showSearchBar }) {
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = "Search messages"
+                )
+            }
+            if (currentConversation != null && !isContactBlocked) {
+                IconButton(onClick = { onCall(currentConversation.peerId) }) {
+                    Icon(
+                        imageVector = Icons.Filled.Call,
+                        contentDescription = "Call"
+                    )
+                }
+            }
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "More options"
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    currentConversation?.let { convo ->
+                        DropdownMenuItem(
+                            text = { Text(if (isContactBlocked) "Unblock" else "Block") },
+                            onClick = {
+                                showMenu = false
+                                onSetBlocked(convo.peerId, !isContactBlocked)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isContactBlocked) Icons.Filled.Person else Icons.Filled.Block,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isContactMuted) "Unmute" else "Mute") },
+                            onClick = {
+                                showMenu = false
+                                onSetMuted(convo.peerId, !isContactMuted)
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (isContactMuted) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                                    contentDescription = null
+                                )
+                            }
+                        )
+                    }
+                }
+            }
         }
 
-        TextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            placeholder = { Text("Search messages") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent
+        if (showSearchBar) {
+            TextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear")
+                        }
+                    }
+                },
+                placeholder = { Text("Search messages") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent
+                )
             )
-        )
+        }
 
         if (currentConversation == null) {
             Text("Conversation not found", style = MaterialTheme.typography.bodyMedium)
@@ -285,7 +400,7 @@ fun ChatDetailScreen(
                     onDraftChanged(it)
                     onTyping(currentConversation.id, currentConversation.peerId)
                 },
-                canAttach = true,
+                canAttach = isPeerDirectlyReachable,
                 canSend = canSend,
                 onAttach = { onSendAttachment(currentConversation.id) },
                 onSend = {

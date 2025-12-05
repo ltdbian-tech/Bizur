@@ -1,0 +1,10 @@
+Bizur 1.2 (versionCode 3) – 2025-12-05
+
+What's new
+- Updated launcher icon to the new Logo1 foreground with light background (#FEFCFA).
+- Release build produced with AUTH_TOKEN and API_KEY injected for signaling defaults.
+- Bundled AAB and APK artifacts for distribution.
+
+Artifacts
+- Bizur_v1.2_release.aab
+- Bizur_v1.2_release.apk

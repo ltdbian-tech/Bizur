@@ -16,6 +16,8 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -24,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +52,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.bizur.android.LocalBizurViewModelFactory
+import com.bizur.android.data.LookupState
 import com.bizur.android.ui.theme.BizurTheme
 import com.bizur.android.ui.components.CallStatusBanner
 import com.bizur.android.ui.screens.CallHistoryScreen
@@ -220,6 +224,10 @@ fun BizurApp(startConversationId: String? = null) {
     val systemDark = isSystemInDarkTheme()
     var useDarkTheme by rememberSaveable(systemDark) { mutableStateOf(systemDark) }
 
+    val totalUnread = remember(uiState.conversations) {
+        uiState.conversations.sumOf { it.unreadCount }
+    }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -230,6 +238,7 @@ fun BizurApp(startConversationId: String? = null) {
                         BizurDestination.Calls -> Icons.Filled.Call
                         BizurDestination.Settings -> Icons.Filled.Settings
                     }
+                    val showBadge = destination == BizurDestination.Chats && totalUnread > 0
                     NavigationBarItem(
                         selected = if (destination == BizurDestination.Chats) isChatFlow else currentRoute == destination.route,
                         onClick = {
@@ -241,7 +250,17 @@ fun BizurApp(startConversationId: String? = null) {
                                 restoreState = true
                             }
                         },
-                        icon = { Icon(icon, contentDescription = destination.label) },
+                        icon = {
+                            if (showBadge) {
+                                BadgedBox(badge = {
+                                    Badge { Text(totalUnread.coerceAtMost(99).toString()) }
+                                }) {
+                                    Icon(icon, contentDescription = destination.label)
+                                }
+                            } else {
+                                Icon(icon, contentDescription = destination.label)
+                            }
+                        },
                         label = { Text(destination.label) }
                     )
                 }
@@ -273,12 +292,17 @@ fun BizurApp(startConversationId: String? = null) {
                     ) { entry ->
                         val conversationId = entry.arguments?.getString("conversationId")
                         val conversation = uiState.conversations.find { it.id == conversationId }
+                        val contact = conversation?.peerId?.let { peerId -> uiState.contacts.find { it.id == peerId } }
+                        val isPeerReachable = conversation?.peerId?.let { viewModel.isPeerDirectlyReachable(it) } ?: false
                         ChatDetailScreen(
                             conversation = conversation,
                             messages = uiState.messages[conversationId] ?: emptyList(),
                             mediaSendProgress = mediaSendProgress,
                             selfId = uiState.identityCode,
                             isOnline = transportStatus == TransportStatus.Connected,
+                            isPeerDirectlyReachable = isPeerReachable,
+                            isContactBlocked = contact?.isBlocked ?: false,
+                            isContactMuted = contact?.isMuted ?: false,
                             typingConversations = typingState,
                             draft = uiState.draft,
                             onDraftChanged = viewModel::updateDraft,
@@ -362,20 +386,29 @@ fun BizurApp(startConversationId: String? = null) {
                             onSetReaction = { msg, reaction -> viewModel.setReaction(msg.id, reaction) },
                             onMarkRead = { conversationId, peerId -> viewModel.markConversationRead(conversationId, peerId) },
                             onTyping = { conversationId, peerId -> viewModel.sendTyping(conversationId, peerId) },
+                            onCall = { peerId -> ensureMicPermission { viewModel.placeCall(peerId) } },
+                            onSetBlocked = viewModel::setContactBlocked,
+                            onSetMuted = viewModel::setContactMuted,
                             onBack = { navController.navigateUp() }
                         )
                     }
                     composable(BizurDestination.Contacts.route) {
+                        val lookupState by viewModel.lookupResult.collectAsState()
                         ContactsScreen(
                             identityCode = uiState.identityCode,
                             contacts = uiState.contacts,
+                            lookupState = lookupState,
                             onPingContact = viewModel::pingContact,
                             onCreateContact = viewModel::createContact,
                             onCallContact = { contactId ->
                                 ensureMicPermission { viewModel.placeCall(contactId) }
                             },
                             onToggleBlock = viewModel::setContactBlocked,
-                            onToggleMute = viewModel::setContactMuted
+                            onToggleMute = viewModel::setContactMuted,
+                            onAcceptRequest = viewModel::acceptContactRequest,
+                            onRejectRequest = viewModel::rejectContactRequest,
+                            onValidateCode = viewModel::validatePeerCode,
+                            onClearLookup = viewModel::clearLookupResult
                         )
                     }
                     composable(BizurDestination.Calls.route) {
@@ -397,6 +430,7 @@ fun BizurApp(startConversationId: String? = null) {
                         SettingsScreen(
                             identity = uiState.identityCode,
                             onReset = viewModel::resetState,
+                            onClearChats = {}, // TODO: implement clearAllChats in ViewModel
                             micPermissionGranted = micPermissionGranted,
                             onRequestMicPermission = requestMicPermission,
                             notificationsGranted = notificationsGranted,

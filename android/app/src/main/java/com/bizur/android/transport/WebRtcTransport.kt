@@ -88,6 +88,9 @@ class WebRtcTransport(
 	private val _incoming = MutableSharedFlow<IncomingMessage>(extraBufferCapacity = 32)
 	override val incomingMessages = _incoming.asSharedFlow()
 
+	private val _contactEvents = MutableSharedFlow<ContactEvent>(extraBufferCapacity = 32)
+	override val contactEvents = _contactEvents.asSharedFlow()
+
 	private val eglBase = EglBase.create()
 	private val audioDeviceModule = JavaAudioDeviceModule.builder(appContext)
 		.setUseHardwareAcousticEchoCanceler(true)
@@ -122,6 +125,7 @@ class WebRtcTransport(
 
 	override suspend fun start() {
 		if (!started.compareAndSet(false, true)) return
+		Log.i(TRANSPORT_TAG, "Starting WebRTC transport, connecting to ${config.signalingUrl}")
 		_status.value = TransportStatus.Connecting
 		signalingClient.start()
 		scope.launch { observeSignaling() }
@@ -172,6 +176,34 @@ class WebRtcTransport(
 
 	override suspend fun requestQueueSync() {
 		signalingClient.requestQueueDrain()
+	}
+
+	override suspend fun sendContactRequest(peerId: String, displayName: String) {
+		signalingClient.sendContactRequest(
+			to = peerId,
+			payload = ContactRequestPayload(displayName = displayName)
+		)
+	}
+
+	override suspend fun sendContactResponse(peerId: String, accepted: Boolean, displayName: String) {
+		signalingClient.sendContactResponse(
+			to = peerId,
+			payload = ContactResponsePayload(accepted = accepted, displayName = displayName)
+		)
+	}
+
+	override suspend fun lookupPeer(peerCode: String) {
+		signalingClient.lookupPeer(peerCode)
+	}
+
+	/**
+	 * Checks if the peer has an open data channel for direct P2P messaging.
+	 * Useful for determining if large payloads (attachments) can be sent directly.
+	 */
+	override fun isPeerDirectlyReachable(peerId: String): Boolean {
+		val session = sessions[peerId] ?: return false
+		val dc = session.dataChannel ?: return false
+		return dc.state() == DataChannel.State.OPEN
 	}
 
 	override fun close() {
@@ -336,6 +368,26 @@ class WebRtcTransport(
 				is SignalingEvent.Answer -> handleRemoteAnswer(event.from, event.payload)
 				is SignalingEvent.Ice -> handleRemoteCandidate(event.from, event.payload)
 				is SignalingEvent.Ciphertext -> handleCiphertext(event)
+				is SignalingEvent.ContactRequest -> {
+					_contactEvents.emit(ContactEvent.RequestReceived(
+						from = event.from,
+						displayName = event.payload.displayName,
+						timestamp = event.payload.timestamp
+					))
+				}
+				is SignalingEvent.ContactResponse -> {
+					_contactEvents.emit(ContactEvent.ResponseReceived(
+						from = event.from,
+						accepted = event.payload.accepted,
+						displayName = event.payload.displayName
+					))
+				}
+				is SignalingEvent.LookupResult -> {
+					_contactEvents.emit(ContactEvent.LookupResult(
+						peerCode = event.target,
+						found = event.found
+					))
+				}
 				is SignalingEvent.Error -> Log.e(TRANSPORT_TAG, "signaling error: ${event.message}")
 			}
 		}

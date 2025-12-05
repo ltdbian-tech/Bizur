@@ -261,8 +261,24 @@ wss.on('connection', (ws, request) => {
       return;
     }
 
-    // Routed messages: offer, answer, ice, ciphertext
-    if (['offer', 'answer', 'ice', 'ciphertext'].includes(type)) {
+    // Lookup a peer code to check if it exists
+    if (type === 'lookup') {
+      const target = msg.target as string;
+      if (!target || typeof target !== 'string') return;
+      const normalizedTarget = target.toUpperCase();
+      // Check if target is registered (has prekeys or is currently connected)
+      const hasPrekeys = stmtGetPreKey.get(normalizedTarget);
+      const isOnline = clients.has(normalizedTarget);
+      ws.send(JSON.stringify({
+        type: 'lookup_result',
+        target: normalizedTarget,
+        found: !!(hasPrekeys || isOnline)
+      }));
+      return;
+    }
+
+    // Routed messages: offer, answer, ice, ciphertext, contact_request, contact_response
+    if (['offer', 'answer', 'ice', 'ciphertext', 'contact_request', 'contact_response'].includes(type)) {
       const to = msg.to as string;
       const msgId = msg.msgId as string;
       if (!to || typeof to !== 'string' || to.length > 128) return;

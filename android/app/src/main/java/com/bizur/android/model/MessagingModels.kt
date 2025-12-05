@@ -1,12 +1,25 @@
 package com.bizur.android.model
 
+/**
+ * Represents the status of a contact request.
+ * - Accepted: Contact is fully linked (both parties agreed)
+ * - PendingOutgoing: Request sent by this user, awaiting acceptance
+ * - PendingIncoming: Request received from peer, awaiting user decision
+ */
+enum class ContactStatus {
+    Accepted,
+    PendingOutgoing,
+    PendingIncoming
+}
+
 data class Contact(
     val id: String,
     val displayName: String,
     val presence: PresenceStatus = PresenceStatus.Offline,
     val lastSeen: String = "",
     val isBlocked: Boolean = false,
-    val isMuted: Boolean = false
+    val isMuted: Boolean = false,
+    val status: ContactStatus = ContactStatus.Accepted
 )
 
 data class Conversation(

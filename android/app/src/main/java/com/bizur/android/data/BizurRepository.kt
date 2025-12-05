@@ -18,11 +18,13 @@ import com.bizur.android.media.AttachmentStore
 import com.bizur.android.model.CallDirection
 import com.bizur.android.model.CallLog
 import com.bizur.android.model.Contact
+import com.bizur.android.model.ContactStatus
 import com.bizur.android.model.Conversation
 import com.bizur.android.model.Message
 import com.bizur.android.model.MessageStatus
 import com.bizur.android.model.PresenceStatus
 import com.bizur.android.notifications.MessageNotifier
+import com.bizur.android.transport.ContactEvent
 import com.bizur.android.transport.IncomingMessage
 import com.bizur.android.transport.MediaChunkEnvelope
 import com.bizur.android.transport.MediaEnvelope
@@ -148,12 +150,24 @@ class BizurRepository(
                     handleIncomingMessage(incoming)
                 }
             }
+            appScope.launch {
+                transport.contactEvents.collect { event ->
+                    handleContactEvent(event)
+                }
+            }
         }
 
         callCoordinator?.let { coordinator ->
             appScope.launch { observeCallSessions(coordinator) }
         }
     }
+
+    /**
+     * Returns true if the peer has an open P2P data channel.
+     * Useful for gating attachment sends that should only happen when both users are online.
+     */
+    fun isPeerDirectlyReachable(peerId: String): Boolean =
+        messageTransport?.isPeerDirectlyReachable(peerId) == true
 
     suspend fun updateDraft(draft: String) {
         withContext(ioDispatcher) { draftStore.update(draft) }
@@ -382,6 +396,37 @@ class BizurRepository(
         }
     }
 
+    // State for tracking lookup results - exposed for UI validation feedback
+    private val _lookupResult = MutableStateFlow<LookupState>(LookupState.Idle)
+    val lookupResult: StateFlow<LookupState> = _lookupResult.asStateFlow()
+
+    suspend fun validatePeerCode(peerCode: String) {
+        withContext(ioDispatcher) {
+            val trimmedCode = peerCode.trim().uppercase()
+            if (trimmedCode.isEmpty()) {
+                _lookupResult.value = LookupState.Invalid("Enter a valid code")
+                return@withContext
+            }
+            val selfCode = resolveIdentityCode()
+            if (trimmedCode.equals(selfCode, ignoreCase = true)) {
+                _lookupResult.value = LookupState.Invalid("Cannot add your own code")
+                return@withContext
+            }
+            // Check if already a contact
+            val existing = contactDao.getById(trimmedCode)
+            if (existing != null) {
+                _lookupResult.value = LookupState.Invalid("Contact already exists")
+                return@withContext
+            }
+            _lookupResult.value = LookupState.Searching
+            messageTransport?.lookupPeer(trimmedCode)
+        }
+    }
+
+    fun clearLookupResult() {
+        _lookupResult.value = LookupState.Idle
+    }
+
     suspend fun createContact(displayName: String, peerCode: String) {
         withContext(ioDispatcher) {
             val trimmedName = displayName.trim()
@@ -392,24 +437,161 @@ class BizurRepository(
             require(!trimmedCode.equals(selfCode, ignoreCase = true)) { "Cannot add your own code." }
 
             val normalizedId = trimmedCode.uppercase()
+            
+            // Check if contact already exists
+            val existing = contactDao.getById(normalizedId)
+            if (existing != null) {
+                Log.w(TAG, "Contact $normalizedId already exists")
+                return@withContext
+            }
+
+            // Create contact with PendingOutgoing status - they need to accept
             val contact = Contact(
                 id = normalizedId,
                 displayName = trimmedName,
                 presence = PresenceStatus.Offline,
-                lastSeen = ""
+                lastSeen = "",
+                status = ContactStatus.PendingOutgoing
             )
-            val conversation = Conversation(
-                id = "chat-$normalizedId",
-                peerId = normalizedId,
-                title = trimmedName,
-                lastMessagePreview = "",
-                lastActivityEpochMillis = System.currentTimeMillis(),
-                unreadCount = 0,
-                isSecure = true
-            )
-
+            
             contactDao.upsert(contact.toEntity())
-            conversationDao.upsert(conversation.toEntity())
+            
+            // Send contact request to peer - use our peer code as identifier
+            val myCode = resolveIdentityCode()
+            messageTransport?.sendContactRequest(normalizedId, myCode)
+            
+            Log.i(TAG, "Sent contact request to $normalizedId")
+        }
+    }
+
+    suspend fun acceptContactRequest(contactId: String) {
+        withContext(ioDispatcher) {
+            val existing = contactDao.getById(contactId)?.toModel() ?: return@withContext
+            if (existing.status != ContactStatus.PendingIncoming) return@withContext
+
+            // Update to Accepted
+            contactDao.setStatus(contactId, ContactStatus.Accepted.name)
+            
+            // Create conversation if not exists
+            val conversationId = "chat-$contactId"
+            val existingConvo = conversationDao.getById(conversationId)
+            if (existingConvo == null) {
+                val conversation = Conversation(
+                    id = conversationId,
+                    peerId = contactId,
+                    title = existing.displayName,
+                    lastMessagePreview = "",
+                    lastActivityEpochMillis = System.currentTimeMillis(),
+                    unreadCount = 0,
+                    isSecure = true
+                )
+                conversationDao.upsert(conversation.toEntity())
+            }
+            
+            // Send acceptance response to peer
+            val myCode = resolveIdentityCode()
+            messageTransport?.sendContactResponse(contactId, accepted = true, displayName = myCode)
+            
+            Log.i(TAG, "Accepted contact request from $contactId")
+        }
+    }
+
+    suspend fun rejectContactRequest(contactId: String) {
+        withContext(ioDispatcher) {
+            val existing = contactDao.getById(contactId)?.toModel() ?: return@withContext
+            if (existing.status != ContactStatus.PendingIncoming) return@withContext
+
+            // Delete the contact
+            contactDao.deleteById(contactId)
+            
+            // Send rejection response to peer
+            messageTransport?.sendContactResponse(contactId, accepted = false, displayName = "")
+            
+            Log.i(TAG, "Rejected contact request from $contactId")
+        }
+    }
+
+    private suspend fun handleContactEvent(event: ContactEvent) {
+        withContext(ioDispatcher) {
+            when (event) {
+                is ContactEvent.RequestReceived -> {
+                    val existing = contactDao.getById(event.from)
+                    if (existing != null) {
+                        // If we already sent them a request, auto-accept both sides
+                        if (existing.toModel().status == ContactStatus.PendingOutgoing) {
+                            contactDao.setStatus(event.from, ContactStatus.Accepted.name)
+                            // Create conversation
+                            val conversationId = "chat-${event.from}"
+                            val existingConvo = conversationDao.getById(conversationId)
+                            if (existingConvo == null) {
+                                conversationDao.upsert(Conversation(
+                                    id = conversationId,
+                                    peerId = event.from,
+                                    title = existing.displayName,
+                                    lastMessagePreview = "",
+                                    lastActivityEpochMillis = System.currentTimeMillis(),
+                                    unreadCount = 0,
+                                    isSecure = true
+                                ).toEntity())
+                            }
+                            val myCode = resolveIdentityCode()
+                            messageTransport?.sendContactResponse(event.from, accepted = true, displayName = myCode)
+                            Log.i(TAG, "Auto-accepted mutual contact request from ${event.from}")
+                        }
+                        return@withContext
+                    }
+                    
+                    // Create incoming request
+                    val contact = Contact(
+                        id = event.from,
+                        displayName = event.displayName.ifBlank { event.from },
+                        presence = PresenceStatus.Offline,
+                        lastSeen = "",
+                        status = ContactStatus.PendingIncoming
+                    )
+                    contactDao.upsert(contact.toEntity())
+                    Log.i(TAG, "Received contact request from ${event.from}")
+                }
+                
+                is ContactEvent.ResponseReceived -> {
+                    val existing = contactDao.getById(event.from) ?: return@withContext
+                    if (event.accepted) {
+                        contactDao.setStatus(event.from, ContactStatus.Accepted.name)
+                        // Update display name if provided
+                        if (event.displayName.isNotBlank()) {
+                            val updated = existing.toModel().copy(displayName = event.displayName)
+                            contactDao.upsert(updated.toEntity())
+                        }
+                        // Create conversation
+                        val conversationId = "chat-${event.from}"
+                        val existingConvo = conversationDao.getById(conversationId)
+                        if (existingConvo == null) {
+                            conversationDao.upsert(Conversation(
+                                id = conversationId,
+                                peerId = event.from,
+                                title = existing.displayName,
+                                lastMessagePreview = "",
+                                lastActivityEpochMillis = System.currentTimeMillis(),
+                                unreadCount = 0,
+                                isSecure = true
+                            ).toEntity())
+                        }
+                        Log.i(TAG, "Contact ${event.from} accepted our request")
+                    } else {
+                        // They rejected - remove the contact
+                        contactDao.deleteById(event.from)
+                        Log.i(TAG, "Contact ${event.from} rejected our request")
+                    }
+                }
+                
+                is ContactEvent.LookupResult -> {
+                    _lookupResult.value = if (event.found) {
+                        LookupState.Found(event.peerCode)
+                    } else {
+                        LookupState.Invalid("User not found")
+                    }
+                }
+            }
         }
     }
 
@@ -858,4 +1040,11 @@ data class BizurDataState(
             draft = ""
         )
     }
+}
+
+sealed interface LookupState {
+    object Idle : LookupState
+    object Searching : LookupState
+    data class Found(val peerCode: String) : LookupState
+    data class Invalid(val reason: String) : LookupState
 }

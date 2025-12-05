@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [ContactEntity::class, ConversationEntity::class, MessageEntity::class, CallLogEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class BizurDatabase : RoomDatabase() {
@@ -28,7 +28,7 @@ abstract class BizurDatabase : RoomDatabase() {
 
         fun build(context: Context, scope: CoroutineScope, seedProvider: () -> BizurDataState): BizurDatabase {
             val database = Room.databaseBuilder(context, BizurDatabase::class.java, DB_NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
             scope.launch {
                 if (database.contactDao().count() == 0) {
@@ -56,6 +56,12 @@ abstract class BizurDatabase : RoomDatabase() {
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE messages ADD COLUMN reaction TEXT DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE contacts ADD COLUMN status TEXT NOT NULL DEFAULT 'Accepted'")
             }
         }
     }

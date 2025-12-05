@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 import com.bizur.android.model.CallDirection
 import com.bizur.android.model.CallLog
 import com.bizur.android.model.Contact
+import com.bizur.android.model.ContactStatus
 import com.bizur.android.model.Conversation
 import com.bizur.android.model.Message
 import com.bizur.android.model.MessageStatus
@@ -18,7 +19,8 @@ data class ContactEntity(
     val presence: String,
     val lastSeen: String,
     @ColumnInfo(defaultValue = "0") val isBlocked: Boolean = false,
-    @ColumnInfo(defaultValue = "0") val isMuted: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isMuted: Boolean = false,
+    @ColumnInfo(defaultValue = "Accepted") val status: String = "Accepted"
 )
 
 @Entity(tableName = "conversations")
@@ -61,7 +63,8 @@ fun ContactEntity.toModel() = Contact(
     presence = PresenceStatus.valueOf(presence),
     lastSeen = lastSeen,
     isBlocked = isBlocked,
-    isMuted = isMuted
+    isMuted = isMuted,
+    status = runCatching { ContactStatus.valueOf(status) }.getOrDefault(ContactStatus.Accepted)
 )
 
 fun Contact.toEntity() = ContactEntity(
@@ -70,7 +73,8 @@ fun Contact.toEntity() = ContactEntity(
     presence = presence.name,
     lastSeen = lastSeen,
     isBlocked = isBlocked,
-    isMuted = isMuted
+    isMuted = isMuted,
+    status = status.name
 )
 
 fun ConversationEntity.toModel() = Conversation(
