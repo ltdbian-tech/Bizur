@@ -1,9 +1,9 @@
-import { io, Socket } from 'socket.io-client';
 import type { Identity, Message } from '@/types/messaging';
+
+const BACKEND_WS_URL = 'wss://bizur-backend.onrender.com/';
 
 interface MessagingOptions {
   identity: Identity;
-  signalServerUrl?: string;
 }
 
 type MessageListener = (message: Message) => void;
@@ -24,11 +24,11 @@ export interface MessagingClient {
 
 export const createMessagingClient = ({
   identity,
-  signalServerUrl,
 }: MessagingOptions): MessagingClient => {
   const listeners = new Set<MessageListener>();
-  let socket: Socket | null = null;
+  let socket: WebSocket | null = null;
   let connected = false;
+  const outbox: Message[] = [];
 
   const emit = (message: Message) => {
     listeners.forEach((listener) => listener(message));
@@ -37,20 +37,59 @@ export const createMessagingClient = ({
   const relayListener: MessageListener = (message) => emit(message);
 
   const connect = () => {
-    if (connected) return;
-    if (signalServerUrl) {
-      socket = io(signalServerUrl, {
-        autoConnect: false,
-        transports: ['websocket'],
-      });
-      socket.on('connect', () => {
+    if (connected || socket?.readyState === WebSocket.OPEN) return;
+    try {
+      socket = new WebSocket(BACKEND_WS_URL);
+
+      socket.onopen = () => {
         connected = true;
-      });
-      socket.on('message', (message: Message) => {
-        emit(message);
-      });
-      socket.connect();
-    } else {
+        socket?.send(JSON.stringify({ type: 'register', from: identity.id, deviceId: 0 }));
+        socket?.send(JSON.stringify({ type: 'pullQueue' }));
+        while (outbox.length) {
+          const pending = outbox.shift();
+          if (pending) {
+            socket?.send(
+              JSON.stringify({
+                type: 'ciphertext',
+                to: pending.conversationId,
+                from: identity.id,
+                payload: pending,
+              })
+            );
+          }
+        }
+      };
+
+      socket.onmessage = (event) => {
+        let raw: any;
+        try {
+          raw = JSON.parse(event.data as string);
+        } catch {
+          return;
+        }
+
+        if (raw.type === 'queued' && raw.payload) {
+          emit(raw.payload as Message);
+          return;
+        }
+
+        if (raw.type === 'ciphertext' && raw.payload) {
+          emit(raw.payload as Message);
+          return;
+        }
+
+        if (raw.type === 'queueEnd') {
+          return;
+        }
+      };
+
+      socket.onclose = () => {
+        connected = false;
+        socket = null;
+        // Attempt a simple reconnect after a short delay
+        setTimeout(connect, 2000);
+      };
+    } catch {
       inMemoryRelay.add(relayListener);
       connected = true;
     }
@@ -58,8 +97,10 @@ export const createMessagingClient = ({
 
   const disconnect = () => {
     if (!connected) return;
-    socket?.disconnect();
-    socket = null;
+    if (socket) {
+      socket.close();
+      socket = null;
+    }
     inMemoryRelay.delete(relayListener);
     listeners.clear();
     connected = false;
@@ -83,10 +124,18 @@ export const createMessagingClient = ({
       status: 'pending',
     };
 
-    if (socket && connected) {
-      socket.emit('message', payload);
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: 'ciphertext',
+          to: conversationId,
+          from: identity.id,
+          payload,
+        })
+      );
     } else {
-      notifyRelay(payload);
+      outbox.push(payload);
+      connect();
     }
 
     emit(payload);
