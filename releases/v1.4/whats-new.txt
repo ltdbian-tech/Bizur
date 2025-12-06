@@ -1,0 +1,18 @@
+Bizur v1.4 - What's New
+=======================
+
+Contact Delivery Fixes
+----------------------
+• Peercode registration on connect so contact requests route reliably
+• Server maps BZ codes to device identities; requests now reach online/offline peers
+
+Delete & Manage
+---------------
+• Delete contacts (with confirmation) also clears chat history
+• Long-press chats to delete conversations and messages; contacts remain
+• Cancel pending outgoing requests directly from the contacts list
+
+Stability & UX
+--------------
+• Improved queue handling when peers are offline
+• Minor UI polish and dependency updates
