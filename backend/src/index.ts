@@ -55,6 +55,12 @@ db.exec(`
     token TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS peercode_mapping (
+    peercode TEXT PRIMARY KEY,
+    identity TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_peercode_identity ON peercode_mapping(identity);
   CREATE TABLE IF NOT EXISTS message_queue (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recipient TEXT NOT NULL,
@@ -98,6 +104,11 @@ const stmtUpsertApiKey = db.prepare(`
   INSERT INTO api_keys (identity, token, updated_at) VALUES (?, ?, ?)
   ON CONFLICT(identity) DO UPDATE SET token=excluded.token, updated_at=excluded.updated_at
 `);
+const stmtUpsertPeercode = db.prepare(`
+  INSERT INTO peercode_mapping (peercode, identity, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(peercode) DO UPDATE SET identity=excluded.identity, updated_at=excluded.updated_at
+`);
+const stmtGetIdentityByPeercode = db.prepare(`SELECT identity FROM peercode_mapping WHERE peercode = ?`);
 const stmtInsertSeen = db.prepare(`INSERT OR IGNORE INTO seen_message_ids (recipient, msg_id, created_at) VALUES (?, ?, ?)`);
 const stmtPruneSeen = db.prepare(`DELETE FROM seen_message_ids WHERE created_at < ?`);
 const stmtPruneQueue = db.prepare(`
@@ -261,28 +272,50 @@ wss.on('connection', (ws, request) => {
       return;
     }
 
+    // Register peercode mapping (BZ-XXXXXXXX -> bizur-XXXXXXXXX-XXXXXX)
+    if (type === 'register_peercode') {
+      const peercode = msg.peercode as string;
+      if (!peercode || typeof peercode !== 'string' || peercode.length > 32) return;
+      const normalizedCode = peercode.toUpperCase();
+      stmtUpsertPeercode.run(normalizedCode, client.identity, Date.now());
+      ws.send(JSON.stringify({ type: 'peercode_registered', peercode: normalizedCode }));
+      console.log(`[peercode] mapped ${normalizedCode} -> ${client.identity}`);
+      return;
+    }
+
     // Lookup a peer code to check if it exists
     if (type === 'lookup') {
       const target = msg.target as string;
       if (!target || typeof target !== 'string') return;
       const normalizedTarget = target.toUpperCase();
-      // Check if target is registered (has prekeys or is currently connected)
+      // Check if target is registered via peercode mapping, has prekeys, or is currently connected
+      const peercodeMapping = stmtGetIdentityByPeercode.get(normalizedTarget) as { identity: string } | undefined;
       const hasPrekeys = stmtGetPreKey.get(normalizedTarget);
-      const isOnline = clients.has(normalizedTarget);
+      const isOnline = clients.has(normalizedTarget) || (peercodeMapping && clients.has(peercodeMapping.identity));
       ws.send(JSON.stringify({
         type: 'lookup_result',
         target: normalizedTarget,
-        found: !!(hasPrekeys || isOnline)
+        found: !!(hasPrekeys || isOnline || peercodeMapping)
       }));
       return;
     }
 
     // Routed messages: offer, answer, ice, ciphertext, contact_request, contact_response
     if (['offer', 'answer', 'ice', 'ciphertext', 'contact_request', 'contact_response'].includes(type)) {
-      const to = msg.to as string;
+      let to = msg.to as string;
       const msgId = msg.msgId as string;
       if (!to || typeof to !== 'string' || to.length > 128) return;
       if (!msgId || typeof msgId !== 'string' || msgId.length > 128) return;
+
+      // For contact_request and contact_response, resolve BZ peercode to internal identity
+      if (type === 'contact_request' || type === 'contact_response') {
+        const normalizedTo = to.toUpperCase();
+        const mapping = stmtGetIdentityByPeercode.get(normalizedTo) as { identity: string } | undefined;
+        if (mapping) {
+          to = mapping.identity;
+          console.log(`[routing] resolved ${normalizedTo} -> ${to}`);
+        }
+      }
 
       // Drop replays for this recipient
       const seenInserted = stmtInsertSeen.run(to, msgId, Date.now());

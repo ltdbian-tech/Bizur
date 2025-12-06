@@ -43,6 +43,7 @@ class SignalingClient(
     private val url: String,
     private val identity: String,
     private val deviceId: Int,
+    private val peerCode: String,
     private val scope: CoroutineScope,
     private val config: TransportConfig,
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -159,6 +160,17 @@ class SignalingClient(
             }
         }
         send(Frame.Text(envelope.toString()))
+        
+        // Register peercode mapping so backend can route contact requests
+        if (peerCode.isNotBlank()) {
+            val peercodeEnvelope = buildJsonObject {
+                put("type", JsonPrimitive("register_peercode"))
+                put("peercode", JsonPrimitive(peerCode))
+            }
+            send(Frame.Text(peercodeEnvelope.toString()))
+            Log.i(SIGNALING_TAG, "Registered peercode: $peerCode")
+        }
+        
         requestQueueDrain()
     }
 

@@ -72,6 +72,7 @@ class WebRtcTransport(
 		url = config.signalingUrl,
 		identity = selfId,
 		deviceId = profile.deviceId,
+		peerCode = selfPeerCode,
 		scope = scope,
 		config = config,
 		json = json,
