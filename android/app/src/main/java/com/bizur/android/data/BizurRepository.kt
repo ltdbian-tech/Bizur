@@ -659,6 +659,28 @@ class BizurRepository(
         withContext(ioDispatcher) { contactDao.setMuted(contactId, muted) }
     }
 
+    suspend fun deleteContact(contactId: String) {
+        withContext(ioDispatcher) {
+            // Delete the contact
+            contactDao.deleteById(contactId)
+            // Also delete associated conversation and messages
+            val conversationId = "chat-$contactId"
+            messageDao.deleteByConversationId(conversationId)
+            conversationDao.deleteById(conversationId)
+            Log.i(TAG, "Deleted contact $contactId and associated chat")
+        }
+    }
+
+    suspend fun deleteConversation(conversationId: String) {
+        withContext(ioDispatcher) {
+            // Delete all messages in the conversation
+            messageDao.deleteByConversationId(conversationId)
+            // Delete the conversation itself
+            conversationDao.deleteById(conversationId)
+            Log.i(TAG, "Deleted conversation $conversationId")
+        }
+    }
+
     private suspend fun resolveIdentityCode(): String {
         val cached = identityCodeState.value
         return if (cached.isNotBlank()) cached else identityStore.ensureIdentityCode()

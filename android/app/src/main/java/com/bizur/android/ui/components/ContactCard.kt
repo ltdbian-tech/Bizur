@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -17,8 +18,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,10 +41,34 @@ fun ContactCard(
     onCall: (Contact) -> Unit,
     onToggleMute: (Contact) -> Unit,
     onToggleBlock: (Contact) -> Unit,
+    onDelete: (Contact) -> Unit,
     onAccept: ((Contact) -> Unit)? = null,
     onReject: ((Contact) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Contact") },
+            text = { Text("Delete ${contact.displayName}? This will also delete your chat history with them.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(contact)
+                    showDeleteDialog = false
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp)
@@ -93,10 +122,24 @@ fun ContactCard(
                                 Text(if (contact.isBlocked) "Unblock" else "Block")
                             }
                         }
+                        OutlinedButton(
+                            onClick = { showDeleteDialog = true },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Delete")
+                        }
                     }
                 }
                 ContactStatus.PendingOutgoing -> {
-                    StatusChip(text = "Pending", color = MaterialTheme.colorScheme.tertiary)
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        StatusChip(text = "Pending", color = MaterialTheme.colorScheme.tertiary)
+                        OutlinedButton(
+                            onClick = { onDelete(contact) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
                 }
                 ContactStatus.PendingIncoming -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

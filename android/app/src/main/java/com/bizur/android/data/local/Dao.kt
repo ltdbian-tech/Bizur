@@ -62,6 +62,9 @@ interface ConversationDao {
 
     @Query("DELETE FROM conversations")
     suspend fun clear()
+
+    @Query("DELETE FROM conversations WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Dao
@@ -86,6 +89,9 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM messages WHERE conversationId = :conversationId")
+    suspend fun deleteByConversationId(conversationId: String)
 
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY sentAtEpochMillis DESC LIMIT 1")
     suspend fun latestForConversation(conversationId: String): MessageEntity?

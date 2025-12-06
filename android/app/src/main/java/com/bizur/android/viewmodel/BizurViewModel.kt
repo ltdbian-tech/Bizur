@@ -119,6 +119,14 @@ class BizurViewModel(private val repository: BizurRepository) : ViewModel() {
         viewModelScope.launch { repository.setContactMuted(contactId, muted) }
     }
 
+    fun deleteContact(contactId: String) {
+        viewModelScope.launch { repository.deleteContact(contactId) }
+    }
+
+    fun deleteConversation(conversationId: String) {
+        viewModelScope.launch { repository.deleteConversation(conversationId) }
+    }
+
     fun endCall() {
         viewModelScope.launch { repository.endCall() }
     }

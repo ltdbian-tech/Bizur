@@ -283,7 +283,8 @@ fun BizurApp(startConversationId: String? = null) {
                             onConversationSelected = { conversation ->
                                 selectedConversationId = conversation.id
                                 navController.navigate(chatDetailRoute(conversation.id))
-                            }
+                            },
+                            onDeleteConversation = viewModel::deleteConversation
                         )
                     }
                     composable(
@@ -407,6 +408,7 @@ fun BizurApp(startConversationId: String? = null) {
                             onToggleMute = viewModel::setContactMuted,
                             onAcceptRequest = viewModel::acceptContactRequest,
                             onRejectRequest = viewModel::rejectContactRequest,
+                            onDeleteContact = viewModel::deleteContact,
                             onValidateCode = viewModel::validatePeerCode,
                             onClearLookup = viewModel::clearLookupResult
                         )

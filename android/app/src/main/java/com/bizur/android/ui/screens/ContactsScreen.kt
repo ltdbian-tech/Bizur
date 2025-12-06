@@ -57,6 +57,7 @@ fun ContactsScreen(
     onToggleMute: (String, Boolean) -> Unit,
     onAcceptRequest: (String) -> Unit,
     onRejectRequest: (String) -> Unit,
+    onDeleteContact: (String) -> Unit,
     onValidateCode: (String) -> Unit,
     onClearLookup: () -> Unit
 ) {
@@ -138,6 +139,7 @@ fun ContactsScreen(
                         onCall = { },
                         onToggleMute = { },
                         onToggleBlock = { },
+                        onDelete = { onDeleteContact(contact.id) },
                         onAccept = { onAcceptRequest(contact.id) },
                         onReject = { onRejectRequest(contact.id) }
                     )
@@ -229,7 +231,8 @@ fun ContactsScreen(
                             onPing = { onPingContact(contact.id) },
                             onCall = { onCallContact(contact.id) },
                             onToggleMute = { onToggleMute(contact.id, !contact.isMuted) },
-                            onToggleBlock = { onToggleBlock(contact.id, !contact.isBlocked) }
+                            onToggleBlock = { onToggleBlock(contact.id, !contact.isBlocked) },
+                            onDelete = { onDeleteContact(contact.id) }
                         )
                     }
                 }

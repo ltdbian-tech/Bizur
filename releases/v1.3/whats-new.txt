@@ -1,0 +1,22 @@
+Bizur v1.3 - What's New
+=======================
+
+Delete Contacts & Chats
+-----------------------
+• Delete contacts with a single tap - includes confirmation dialog
+• Cancel pending outgoing contact requests
+• Long-press any chat to delete it
+• Deleting a contact also removes chat history
+• Deleting a chat removes all messages (contact remains)
+
+Contact Request System (from v1.2)
+----------------------------------
+• Send contact requests via pairing code
+• Accept or reject incoming requests
+• Pending request status shown in contacts list
+• "Contact Requests" section for incoming requests
+
+Bug Fixes & Improvements
+------------------------
+• Improved stability and performance
+• Enhanced UI feedback for delete actions

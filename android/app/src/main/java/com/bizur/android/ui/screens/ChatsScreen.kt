@@ -130,7 +130,8 @@ fun ChatListScreen(
     isOnline: Boolean,
     selectedConversationId: String?,
     onRefresh: () -> Unit,
-    onConversationSelected: (Conversation) -> Unit
+    onConversationSelected: (Conversation) -> Unit,
+    onDeleteConversation: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var refreshing by remember { mutableStateOf(false) }
@@ -212,7 +213,8 @@ fun ChatListScreen(
                         ConversationCard(
                             conversation = conversation,
                             isSelected = conversation.id == selectedConversationId,
-                            onClick = { onConversationSelected(conversation) }
+                            onClick = { onConversationSelected(conversation) },
+                            onDelete = { onDeleteConversation(conversation.id) }
                         )
                     }
                 }
